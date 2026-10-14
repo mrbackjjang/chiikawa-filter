@@ -135,11 +135,11 @@ function capture() {
   setTimeout(() => (flash.style.opacity = "0"), 80);
 }
 
-// 폰: 공유 시트("이미지 저장" / 갤러리) · PC: 파일 다운로드
+// 아이폰: 공유 시트의 "이미지 저장" · 안드로이드/PC: 다운로드 (안드로이드는 갤러리 'Download' 앨범에 들어감)
 async function saveShot() {
   if (!shot) return;
-  const touch = matchMedia("(pointer: coarse)").matches;
-  if (touch && navigator.canShare?.({ files: [shot] })) {
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (ios && navigator.canShare?.({ files: [shot] })) {
     try {
       await navigator.share({ files: [shot] });
       return;
