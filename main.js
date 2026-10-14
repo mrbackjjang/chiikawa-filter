@@ -1,5 +1,6 @@
 import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
-import { drawMakeup, drawBeanEyes } from "./makeup.js";
+import { drawMakeup, drawBeanEyes, EarSpring } from "./makeup.js";
+import { createHairSegmenter, HairLayer } from "./hair.js";
 import { Warper, deformFace } from "./warp.js";
 
 const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
@@ -19,11 +20,12 @@ let lastTs = -1;
 let warpOn = false;
 let strength = 0.7;
 const warper = new Warper();
+const spring = new EarSpring();
+let hair = null;
 
 const setStatus = (msg) => (statusEl.textContent = msg);
 
-async function createLandmarker() {
-  const fileset = await FilesetResolver.forVisionTasks(WASM);
+async function createLandmarker(fileset) {
   const opts = (delegate) => ({
     baseOptions: { modelAssetPath: MODEL, delegate },
     runningMode: "VIDEO",
@@ -84,18 +86,20 @@ function loop() {
     const face = landmarker.detectForVideo(src, ts).faceLandmarks[0];
     if (face) {
       const pts = smooth(face).map((p) => ({ x: p.x * w, y: p.y * h }));
+      const shown = warpOn ? deformFace(pts, strength) : pts;
       if (warpOn) {
-        const warped = deformFace(pts, strength);
-        warper.render(src, pts, warped, w, h);
+        warper.render(src, pts, shown, w, h);
         ctx.drawImage(warper.canvas, 0, 0);
-        drawMakeup(ctx, warped, character);
-        drawBeanEyes(ctx, warped);
-      } else {
-        drawMakeup(ctx, pts, character);
       }
+      // 머리카락은 (변형된) 화면 자체에서 찾아야 위치가 정확히 맞음
+      if (hair && character !== "none") hair.update(canvas);
+      drawMakeup(ctx, shown, character, { hair, sway: spring.update(shown) });
+      if (warpOn) drawBeanEyes(ctx, shown);
       if (source === "photo") setStatus("");
     } else {
       smoothed = null;
+      spring.reset();
+      hair?.reset();
       if (source === "photo") setStatus("얼굴을 찾지 못했어요.");
     }
   }
@@ -153,7 +157,11 @@ document.getElementById("file").addEventListener("change", (e) => {
 });
 
 setStatus("얼굴 인식 모델 불러오는 중…");
-landmarker = await createLandmarker();
+const fileset = await FilesetResolver.forVisionTasks(WASM);
+landmarker = await createLandmarker(fileset);
+createHairSegmenter(fileset)
+  .then((seg) => (hair = new HairLayer(seg)))
+  .catch((e) => console.warn("머리카락 인식 모델을 불러오지 못했어요", e));
 setStatus("카메라 켜는 중…");
 await startCamera();
 requestAnimationFrame(loop);

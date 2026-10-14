@@ -6,7 +6,6 @@ export const IDX = {
 };
 export const FACE_OVAL = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377,
   152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
-const FOREHEAD_TOP = [127, 162, 21, 54, 103, 67, 109, 10, 338, 297, 332, 284, 251, 389, 356];
 
 const INK = "#2b2626";
 
@@ -92,68 +91,130 @@ function worriedBrows(ctx, f, p) {
   }
 }
 
-function chiikawaEars(ctx, f, p) {
-  local(ctx, f, offset(f, p[IDX.top], 0, 0.2), () => {
-    for (const side of [-1, 1]) {
-      ctx.beginPath();
-      ctx.arc(side * 0.28, 0.06, 0.15, Math.PI, 0);
-      ctx.closePath();
-      ctx.fillStyle = "#fffdfa";
-      ctx.fill();
-      ctx.stroke();
-    }
-  });
-}
+// ---- 귀: 명암·그림자를 넣고, 머리카락 뒤에서 자라난 것처럼 그림 ----
 
-function hachiwareCap(ctx, f, p) {
-  const blue = "#5f86a8";
-  // 고양이 귀
-  local(ctx, f, offset(f, p[IDX.top], 0, 0.3), () => {
-    for (const side of [-1, 1]) {
-      ctx.beginPath();
-      ctx.moveTo(side * 0.14, 0.1);
-      ctx.lineTo(side * 0.34, -0.17);
-      ctx.lineTo(side * 0.44, 0.12);
-      ctx.closePath();
-      ctx.fillStyle = blue;
-      ctx.fill();
-      ctx.stroke();
-    }
-  });
-  // 가운데가 ㅅ자로 갈라진 파란 머리
-  const upper = FOREHEAD_TOP.map((i) => offset(f, p[i], 0, 0.28)).reverse(); // 오른쪽 → 왼쪽으로 돌아오며 다각형을 닫음
-  const lowerRight = [127, 70, 63, 105].map((i, k) => (k ? offset(f, p[i], 0, 0.06) : p[i]));
-  const apex = offset(f, p[IDX.top], 0, 0.05);
-  const lowerLeft = [334, 293, 300, 356].map((i, k) => (k < 3 ? offset(f, p[i], 0, 0.06) : p[i]));
-  ctx.save();
-  ctx.fillStyle = blue;
-  ctx.strokeStyle = INK;
-  ctx.lineWidth = f.fw * 0.014;
-  ctx.lineJoin = "round";
-  tracePath(ctx, [...lowerRight, apex, ...lowerLeft, ...upper]);
+// 로컬 좌표(단위 = 얼굴 너비)의 현재 path를 입체감 있게 칠하기
+function shade(ctx, f, light, dark, cx, cy, r) {
+  const g = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.4, r * 0.05, cx, cy, r);
+  g.addColorStop(0, light);
+  g.addColorStop(1, dark);
+  ctx.fillStyle = g;
+  ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
+  ctx.shadowBlur = f.fw * 0.03; // 그림자 값은 변환 영향을 받지 않아 px 단위
+  ctx.shadowOffsetY = f.fw * 0.01;
   ctx.fill();
+  ctx.shadowColor = "transparent";
+  ctx.strokeStyle = "rgba(60, 45, 45, 0.3)";
+  ctx.lineWidth = 0.006;
   ctx.stroke();
-  ctx.restore();
 }
 
-function usagiEars(ctx, f, p) {
-  local(ctx, f, offset(f, p[IDX.top], 0, 0.2), () => {
-    for (const side of [-1, 1]) {
-      ctx.save();
-      ctx.translate(side * 0.17, 0);
-      ctx.rotate(side * 0.12);
+// 귀 모양: 원점 = 귀 뿌리, 위쪽(-y)으로 자람
+const EARS = {
+  chiikawa: {
+    base: { x: 0.27, y: 0.16, tilt: 0.25 },
+    draw(ctx, f) {
+      ctx.beginPath();
+      ctx.arc(0, -0.1, 0.13, 0, Math.PI * 2);
+      shade(ctx, f, "#ffffff", "#e3dbd0", 0, -0.1, 0.15);
+    },
+  },
+  hachiware: {
+    base: { x: 0.25, y: 0.2, tilt: 0.3 },
+    draw(ctx, f) {
+      ctx.beginPath();
+      ctx.moveTo(-0.11, 0.03);
+      ctx.quadraticCurveTo(-0.08, -0.18, 0, -0.27);
+      ctx.quadraticCurveTo(0.08, -0.18, 0.11, 0.03);
+      ctx.closePath();
+      shade(ctx, f, "#9bbad6", "#4c7090", 0, -0.12, 0.22);
+    },
+  },
+  usagi: {
+    base: { x: 0.14, y: 0.18, tilt: 0.12 },
+    sway: 1.6, // 긴 귀는 더 크게 흔들림
+    draw(ctx, f) {
       ctx.beginPath();
       ctx.ellipse(0, -0.42, 0.1, 0.47, 0, 0, Math.PI * 2);
-      ctx.fillStyle = "#f5df8e";
-      ctx.fill();
-      ctx.stroke();
+      shade(ctx, f, "#fcefb8", "#d8b95a", 0, -0.42, 0.5);
+      const g = ctx.createLinearGradient(0, -0.75, 0, -0.05);
+      g.addColorStop(0, "rgba(234, 160, 180, 0.95)");
+      g.addColorStop(1, "rgba(234, 160, 180, 0.2)");
       ctx.beginPath();
       ctx.ellipse(0, -0.42, 0.045, 0.33, 0, 0, Math.PI * 2);
-      ctx.fillStyle = "#eaa6b8";
+      ctx.fillStyle = g;
       ctx.fill();
-      ctx.restore();
+    },
+  },
+};
+
+// 귀 뿌리 높이: 머리카락 꼭대기에서 살짝 안쪽 (떨리지 않게 프레임 간 평활)
+const earRoot = { [-1]: null, [1]: null };
+function rootHeight(ctx, f, p, hair, side, ear) {
+  const start = offset(f, p[IDX.top], side * ear.base.x, 0);
+  const ext = hair?.hairExtent(start, f.up, f.fw * 0.8, ctx.canvas.width);
+  const target = ext == null ? ear.base.y : Math.max(0.05, ext / f.fw - 0.05);
+  earRoot[side] = earRoot[side] == null ? target : earRoot[side] + (target - earRoot[side]) * 0.3;
+  return earRoot[side];
+}
+
+function drawEars(ctx, f, p, character, sway, hair) {
+  const ear = EARS[character];
+  if (!ear) return;
+  for (const side of [-1, 1]) {
+    local(ctx, f, offset(f, p[IDX.top], side * ear.base.x, rootHeight(ctx, f, p, hair, side, ear)), () => {
+      ctx.rotate(side * ear.base.tilt + sway * (ear.sway ?? 1));
+      ear.draw(ctx, f);
+    });
+  }
+}
+
+// 머리 움직임에 늦게 따라오며 출렁이는 귀 (스프링)
+export class EarSpring {
+  angle = 0;
+  vel = 0;
+  prev = null;
+
+  update(p) {
+    const f = faceFrame(p);
+    const a = p[IDX.top];
+    if (this.prev) {
+      const dx = ((a.x - this.prev.x) * f.u.x + (a.y - this.prev.y) * f.u.y) / f.fw; // 좌우 이동량 (얼굴 너비 단위)
+      const dRoll = f.roll - this.prev.roll;
+      this.vel += -0.12 * this.angle - 0.15 * this.vel - dx * 3 - dRoll;
+      this.angle = Math.max(-0.5, Math.min(0.5, this.angle + this.vel));
     }
-  });
+    this.prev = { x: a.x, y: a.y, roll: f.roll };
+    return this.angle;
+  }
+
+  reset() {
+    this.prev = null;
+  }
+}
+
+// 하치와레: 실제 머리카락을 파랗게 염색하고 가운데에 ㅅ자 흰 가르마
+const HACHI_BLUE = "#5f86a8";
+function hachiwareHair(f, p) {
+  return (c) => {
+    const { width, height } = c.canvas;
+    c.globalCompositeOperation = "screen"; // 어두운 머리도 밝은 파랑이 되도록 먼저 밝힘
+    c.fillStyle = "rgb(105, 130, 155)";
+    c.fillRect(0, 0, width, height);
+    c.globalCompositeOperation = "color"; // 밝기(머리결)는 유지하고 색만 바꿈
+    c.fillStyle = HACHI_BLUE;
+    c.fillRect(0, 0, width, height);
+    c.globalCompositeOperation = "source-over";
+    c.filter = `blur(${Math.round(f.fw * 0.02)}px)`;
+    c.fillStyle = "rgba(246, 244, 240, 0.92)";
+    tracePath(c, [
+      offset(f, p[IDX.top], 0, -0.02),
+      offset(f, p[IDX.top], -0.22, 0.7),
+      offset(f, p[IDX.top], 0.22, 0.7),
+    ]);
+    c.fill();
+    c.filter = "none";
+  };
 }
 
 // 까만 콩 눈: 눈을 감으면 ^ 모양으로 바뀜
@@ -193,22 +254,19 @@ export function drawBeanEyes(ctx, p) {
   }
 }
 
-export function drawMakeup(ctx, p, character) {
+// hair: HairLayer (머리카락 마스크), sway: EarSpring 각도
+export function drawMakeup(ctx, p, character, { hair, sway = 0 } = {}) {
   if (character === "none") return;
   const f = faceFrame(p);
 
-  if (character === "usagi") {
-    skinTint(ctx, f, p, "rgba(255, 214, 90, 0.4)", "multiply");
-    usagiEars(ctx, f, p);
-    worriedBrows(ctx, f, p);
-  } else {
-    skinTint(ctx, f, p, "rgba(255, 255, 255, 0.2)", "screen");
-    if (character === "chiikawa") {
-      chiikawaEars(ctx, f, p);
-      worriedBrows(ctx, f, p);
-    } else {
-      hachiwareCap(ctx, f, p);
-    }
-  }
+  if (character === "usagi") skinTint(ctx, f, p, "rgba(255, 214, 90, 0.4)", "multiply");
+  else skinTint(ctx, f, p, "rgba(255, 255, 255, 0.2)", "screen");
+
+  // 귀를 먼저 그리고 그 위에 머리카락을 다시 덮어서, 귀 뿌리가 머리카락에 묻히게 함
+  const ears = () => drawEars(ctx, f, p, character, sway, hair);
+  if (hair?.ready) hair.composite(ctx, character === "hachiware" ? hachiwareHair(f, p) : null, ears);
+  else ears();
+
+  if (character !== "hachiware") worriedBrows(ctx, f, p);
   blush(ctx, f, p);
 }

@@ -15,29 +15,35 @@ export function deformFace(p, s) {
   const f = faceFrame(p);
   const out = p.map((q) => ({ x: q.x, y: q.y }));
 
-  // 1) 떡 얼굴: 눈 높이 아래쪽을 위로 눌러 납작하게, 아래로 갈수록 살짝 옆으로 통통하게
+  // 1) 떡 얼굴: 코 아래 얼굴을 '일정한 양'만큼 위로 올림.
+  //    비율로 줄이면 턱 움직임까지 줄어들기 때문에, 평행이동으로 해서 입을 벌리면 턱이 그대로 따라 내려가게 함
   const eyeLine = { x: (p[IDX.irisR].x + p[IDX.irisL].x) / 2, y: (p[IDX.irisR].y + p[IDX.irisL].y) / 2 };
+  const noseDepth = -dot({ x: p[1].x - eyeLine.x, y: p[1].y - eyeLine.y }, f.up); // 눈~코끝 거리
   for (const q of out) {
     const d = { x: q.x - eyeLine.x, y: q.y - eyeLine.y };
     const dy = dot(d, f.up);
     if (dy >= 0) continue;
-    const dx = dot(d, f.u);
-    const lift = -dy * 0.3 * s;
-    const widen = dx * 0.12 * s * Math.min(1, -dy / (0.5 * f.fw));
+    const wgt = smoothstep(Math.min(1, -dy / noseDepth)); // 눈 높이 0 → 코끝부터 1
+    const lift = 0.13 * f.fw * s * wgt;
+    const widen = dot(d, f.u) * 0.1 * s * wgt;
     q.x += f.up.x * lift + f.u.x * widen;
     q.y += f.up.y * lift + f.u.y * widen;
   }
 
-  // 2) 작은 입: 입 중심으로 모으기 (가운데는 최대 55%까지, 반경 끝에서는 0)
+  // 2) 작은 입: 입 중심으로 모으기. 타원 범위를 입 크기에 맞춰서 턱은 건드리지 않음
   const m = [13, 14, IDX.mouthR, IDX.mouthL].reduce(
     (a, i) => ({ x: a.x + out[i].x / 4, y: a.y + out[i].y / 4 }), { x: 0, y: 0 });
-  const R = 0.34 * f.fw;
+  const mw = Math.hypot(out[IDX.mouthL].x - out[IDX.mouthR].x, out[IDX.mouthL].y - out[IDX.mouthR].y);
+  const Rx = 0.85 * mw, Ry = 0.5 * mw;
   for (const q of out) {
-    const d = Math.hypot(q.x - m.x, q.y - m.y);
-    if (d >= R) continue;
-    const k = 1 - 0.55 * s * smoothstep(1 - d / R);
-    q.x = m.x + (q.x - m.x) * k;
-    q.y = m.y + (q.y - m.y) * k;
+    const d = { x: q.x - m.x, y: q.y - m.y };
+    const dx = dot(d, f.u), dy = dot(d, f.up);
+    const r = Math.hypot(dx / Rx, dy / Ry);
+    if (r >= 1) continue;
+    const t = smoothstep(1 - r);
+    const kx = 1 - 0.5 * s * t, ky = 1 - 0.3 * s * t; // 가로는 많이, 세로는 조금 (벌린 입은 유지)
+    q.x = m.x + f.u.x * dx * kx + f.up.x * dy * ky;
+    q.y = m.y + f.u.y * dx * kx + f.up.y * dy * ky;
   }
   return out;
 }
