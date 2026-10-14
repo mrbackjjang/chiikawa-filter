@@ -7,7 +7,9 @@ const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
 const MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 
 const canvas = document.getElementById("view");
-const ctx = canvas.getContext("2d");
+// WebGL(변형)과 2D 캔버스를 오가며 그리는데, GPU 가속 2D 캔버스는 일부 브라우저에서 이 과정이 어긋나 화면이 까맣게 나옴.
+// willReadFrequently로 CPU 캔버스를 쓰면 안정적으로 동작함
+const ctx = canvas.getContext("2d", { willReadFrequently: true });
 const statusEl = document.getElementById("status");
 const preview = document.getElementById("preview");
 const shotEl = document.getElementById("shot");
@@ -91,7 +93,8 @@ function loop() {
       const pts = smooth(face).map((p) => ({ x: p.x * w, y: p.y * h }));
       const shown = warpOn ? deformFace(pts, strength) : pts;
       if (warpOn) {
-        warper.render(src, pts, shown, w, h);
+        // 방금 그린 프레임(캔버스)을 텍스처로 넘겨서 비디오/사진 구분 없이 같은 경로로 처리
+        warper.render(canvas, pts, shown, w, h);
         ctx.drawImage(warper.canvas, 0, 0);
       }
       // 머리카락은 (변형된) 화면 자체에서 찾아야 위치가 정확히 맞음
