@@ -217,40 +217,45 @@ function hachiwareHair(f, p) {
   };
 }
 
-// 까만 콩 눈: 눈을 감으면 ^ 모양으로 바뀜
-const EYES = [
-  { iris: IDX.irisR, corners: [33, 133], lids: [159, 145] },
-  { iris: IDX.irisL, corners: [362, 263], lids: [386, 374] },
+// 치이카와 눈: 실제 눈(변형으로 이미 커진 상태)을 짙게 물들이고 반짝이를 넣음.
+// 눈꺼풀 윤곽 안에만 칠하므로 깜빡이면 자연스럽게 같이 감김
+export const EYES = [
+  { iris: IDX.irisR, corners: [33, 133], lids: [159, 145],
+    contour: [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246] },
+  { iris: IDX.irisL, corners: [362, 263], lids: [386, 374],
+    contour: [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398] },
 ];
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
-export function drawBeanEyes(ctx, p) {
+export function drawChiikawaEyes(ctx, p) {
   const f = faceFrame(p);
   for (const eye of EYES) {
-    const eyeW = dist(p[eye.corners[0]], p[eye.corners[1]]) / f.fw; // 얼굴 너비 단위
-    const open = dist(p[eye.lids[0]], p[eye.lids[1]]) / (eyeW * f.fw);
-    const rx = eyeW * 0.62, ry = eyeW * 0.7;
+    const ew = dist(p[eye.corners[0]], p[eye.corners[1]]) / f.fw; // 눈 너비 (얼굴 너비 단위)
+    const eh = dist(p[eye.lids[0]], p[eye.lids[1]]) / f.fw; // 눈 뜬 높이
+    const hl = Math.min(ew * 0.15, eh * 0.4); // 반짝이 크기는 눈 뜬 만큼만
+    const contour = eye.contour.map((i) => p[i]);
+    ctx.save();
+    // 흰자까지 짙게: multiply라서 속눈썹·눈꺼풀 결은 남고, 살짝 번지게 해서 아이라인처럼 보이게
+    ctx.globalCompositeOperation = "multiply";
+    ctx.filter = `blur(${Math.max(1, Math.round(f.fw * 0.005))}px)`;
+    ctx.fillStyle = "rgb(45, 35, 38)";
+    tracePath(ctx, contour);
+    ctx.fill();
+    ctx.filter = "none";
+    ctx.globalCompositeOperation = "source-over";
+    // 반짝이: 눈꺼풀 안쪽에만 보이게 잘라냄
+    tracePath(ctx, contour);
+    ctx.clip();
     local(ctx, f, p[eye.iris], () => {
-      if (open < 0.16) {
-        ctx.lineWidth = rx * 0.28;
-        ctx.beginPath();
-        ctx.moveTo(-rx * 0.8, rx * 0.15);
-        ctx.quadraticCurveTo(0, -rx * 0.6, rx * 0.8, rx * 0.15);
-        ctx.stroke();
-        return;
-      }
-      ctx.fillStyle = "#1d1919";
+      ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
       ctx.beginPath();
-      ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.beginPath();
-      ctx.arc(-rx * 0.3, -ry * 0.35, rx * 0.3, 0, Math.PI * 2);
+      ctx.arc(-hl, -hl * 0.6, hl, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(rx * 0.28, ry * 0.32, rx * 0.12, 0, Math.PI * 2);
+      ctx.arc(hl * 1.1, hl * 0.7, hl * 0.42, 0, Math.PI * 2);
       ctx.fill();
     });
+    ctx.restore();
   }
 }
 

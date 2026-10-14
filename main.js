@@ -1,5 +1,5 @@
 import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
-import { drawMakeup, drawBeanEyes, EarSpring } from "./makeup.js";
+import { drawMakeup, drawChiikawaEyes, EarSpring } from "./makeup.js";
 import { createHairSegmenter, HairLayer } from "./hair.js";
 import { Warper, deformFace } from "./warp.js";
 
@@ -9,6 +9,9 @@ const MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/f
 const canvas = document.getElementById("view");
 const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
+const preview = document.getElementById("preview");
+const shotEl = document.getElementById("shot");
+let shot = null; // 마지막으로 찍은 사진 (File)
 const video = Object.assign(document.createElement("video"), { playsInline: true, muted: true });
 
 let landmarker = null;
@@ -73,7 +76,7 @@ function loop() {
   const src = source === "camera" ? video : photo;
   const w = src && (src.videoWidth || src.naturalWidth);
   const h = src && (src.videoHeight || src.naturalHeight);
-  if (landmarker && w && h) {
+  if (landmarker && w && h && preview.hidden) { // 미리보기 중에는 멈춤 (저장 처리 빠르게)
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w;
       canvas.height = h;
@@ -94,7 +97,7 @@ function loop() {
       // 머리카락은 (변형된) 화면 자체에서 찾아야 위치가 정확히 맞음
       if (hair && character !== "none") hair.update(canvas);
       drawMakeup(ctx, shown, character, { hair, sway: spring.update(shown) });
-      if (warpOn) drawBeanEyes(ctx, shown);
+      if (warpOn) drawChiikawaEyes(ctx, shown);
       if (source === "photo") setStatus("");
     } else {
       smoothed = null;
@@ -118,15 +121,33 @@ function capture() {
   }
   c.drawImage(canvas, 0, 0);
   out.toBlob((blob) => {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${character}-${Date.now()}.png`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  });
+    shot = new File([blob], `${character}-${Date.now()}.jpg`, { type: "image/jpeg" });
+    shotEl.src = URL.createObjectURL(shot);
+  }, "image/jpeg", 0.92);
+  shot = null;
+  shotEl.removeAttribute("src");
+  preview.hidden = false;
   const flash = document.getElementById("flash");
   flash.style.opacity = "0.8";
   setTimeout(() => (flash.style.opacity = "0"), 80);
+}
+
+// 폰: 공유 시트("이미지 저장" / 갤러리) · PC: 파일 다운로드
+async function saveShot() {
+  if (!shot) return;
+  const touch = matchMedia("(pointer: coarse)").matches;
+  if (touch && navigator.canShare?.({ files: [shot] })) {
+    try {
+      await navigator.share({ files: [shot] });
+      return;
+    } catch (e) {
+      if (e.name === "AbortError") return; // 사용자가 공유 창을 닫음
+    }
+  }
+  const a = document.createElement("a");
+  a.href = shotEl.src;
+  a.download = shot.name;
+  a.click();
 }
 
 document.querySelectorAll("#chars .chip").forEach((btn) =>
@@ -141,6 +162,11 @@ document.getElementById("warp").addEventListener("click", (e) => {
 });
 document.getElementById("strength").addEventListener("input", (e) => (strength = e.target.value / 100));
 document.getElementById("shutter").addEventListener("click", capture);
+document.getElementById("save").addEventListener("click", saveShot);
+document.getElementById("retake").addEventListener("click", () => {
+  if (shotEl.src) URL.revokeObjectURL(shotEl.src);
+  preview.hidden = true;
+});
 document.getElementById("camera").addEventListener("click", startCamera);
 document.getElementById("upload").addEventListener("click", () => document.getElementById("file").click());
 document.getElementById("file").addEventListener("change", (e) => {

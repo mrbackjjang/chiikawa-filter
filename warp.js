@@ -1,6 +1,6 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 import Delaunator from "https://cdn.jsdelivr.net/npm/delaunator@5.0.1/+esm";
-import { IDX, FACE_OVAL, faceFrame } from "./makeup.js";
+import { IDX, FACE_OVAL, EYES, faceFrame } from "./makeup.js";
 
 const MESH_POINTS = 468; // 홍채 점(468~477)은 메시에서 제외
 const RING_SCALE = 1.6;  // 얼굴 윤곽 바깥 고정 고리의 크기 (윤곽 대비)
@@ -14,6 +14,21 @@ const dot = (a, b) => a.x * b.x + a.y * b.y;
 export function deformFace(p, s) {
   const f = faceFrame(p);
   const out = p.map((q) => ({ x: q.x, y: q.y }));
+
+  // 0) 큰 눈: 홍채 중심 기준으로 눈 주변을 부풀림. 세로를 더 키워서 동그란 눈으로
+  for (const eye of EYES) {
+    const c = p[eye.iris];
+    const R = 1.4 * Math.hypot(p[eye.corners[1]].x - p[eye.corners[0]].x, p[eye.corners[1]].y - p[eye.corners[0]].y);
+    for (const q of out) {
+      const d = { x: q.x - c.x, y: q.y - c.y };
+      const r = Math.hypot(d.x, d.y) / R;
+      if (r >= 1) continue;
+      const t = (1 - r) * (1 - r);
+      const dx = dot(d, f.u) * (1 + 0.5 * s * t), dy = dot(d, f.up) * (1 + 1.1 * s * t);
+      q.x = c.x + f.u.x * dx + f.up.x * dy;
+      q.y = c.y + f.u.y * dx + f.up.y * dy;
+    }
+  }
 
   // 1) 떡 얼굴: 코 아래 얼굴을 '일정한 양'만큼 위로 올림.
   //    비율로 줄이면 턱 움직임까지 줄어들기 때문에, 평행이동으로 해서 입을 벌리면 턱이 그대로 따라 내려가게 함
