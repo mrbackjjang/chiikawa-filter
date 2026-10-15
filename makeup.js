@@ -78,14 +78,71 @@ function blush(ctx, f, p) {
   }
 }
 
-// 눈 위의 작은 '곤란한' 눈썹
-function worriedBrows(ctx, f, p) {
-  for (const [eye, side] of [[IDX.irisR, -1], [IDX.irisL, 1]]) {
-    local(ctx, f, offset(f, p[eye], 0, 0.2), () => {
-      ctx.lineWidth = 0.016;
+// ---- 눈썹: 실제 눈썹을 지우고 그 자리에 캐릭터 눈썹 ----
+
+// 윗선(바깥→안쪽) + 아랫선(안쪽→바깥)으로 눈썹 테두리를 한 바퀴
+const BROWS = [
+  { side: -1, outline: [70, 63, 105, 66, 107, 55, 65, 52, 53, 46] }, // 사용자 오른쪽(이미지 왼쪽)
+  { side: 1, outline: [300, 293, 334, 296, 336, 285, 295, 282, 283, 276] },
+];
+const patch = document.createElement("canvas");
+const pctx = patch.getContext("2d", { willReadFrequently: true });
+
+// 눈썹 바로 위 이마 피부를 복사해서 덮고, 흐린 테두리로 섞음 (복제 도장 방식)
+function eraseBrows(ctx, f, p) {
+  const lift = f.fw * 0.12; // 피부를 가져올 거리 (눈썹 두께 + 테두리보다 위)
+  const pad = Math.ceil(f.fw * 0.05);
+  for (const brow of BROWS) {
+    const pts = brow.outline.map((i) => p[i]);
+    const x0 = Math.floor(Math.min(...pts.map((q) => q.x))) - pad;
+    const y0 = Math.floor(Math.min(...pts.map((q) => q.y))) - pad;
+    const bw = Math.ceil(Math.max(...pts.map((q) => q.x))) + pad - x0;
+    const bh = Math.ceil(Math.max(...pts.map((q) => q.y))) + pad - y0;
+    patch.width = bw;
+    patch.height = bh;
+    pctx.drawImage(ctx.canvas, x0 + f.up.x * lift, y0 + f.up.y * lift, bw, bh, 0, 0, bw, bh);
+    // 눈썹 모양(조금 두껍게, 흐리게)만 남기기
+    pctx.globalCompositeOperation = "destination-in";
+    pctx.filter = `blur(${Math.max(1, Math.round(f.fw * 0.012))}px)`;
+    pctx.lineWidth = f.fw * 0.05; // 랜드마크 윤곽보다 실제 눈썹이 넓어서 넉넉히
+    pctx.lineJoin = "round";
+    // 랜드마크 아랫선이 실제 눈썹 아래 끝보다 위에 잡혀서, 아랫선(뒤쪽 5개)은 조금 내려서 지움
+    const down = f.fw * 0.03;
+    tracePath(pctx, pts.map((q, k) => ({
+      x: q.x - x0 - (k >= 5 ? f.up.x * down : 0),
+      y: q.y - y0 - (k >= 5 ? f.up.y * down : 0),
+    })));
+    pctx.fill();
+    pctx.stroke();
+    ctx.drawImage(patch, x0, y0);
+  }
+}
+
+// 캐릭터 눈썹: 원래 눈썹 가운데에 짧고 굵게
+const BROW_STYLE = {
+  chiikawa: (ctx, side) => { // 곤란한 눈썹: 안쪽 끝이 올라감
+    ctx.moveTo(side * 0.045, 0.01);
+    ctx.lineTo(-side * 0.04, -0.016);
+  },
+  hachiware: (ctx) => { // 짧고 평평한 눈썹
+    ctx.moveTo(-0.035, 0);
+    ctx.lineTo(0.035, 0);
+  },
+  usagi: (ctx) => { // 동그랗게 휜 눈썹
+    ctx.moveTo(-0.04, 0.01);
+    ctx.quadraticCurveTo(0, -0.025, 0.04, 0.01);
+  },
+};
+
+function characterBrows(ctx, f, p, character) {
+  const style = BROW_STYLE[character];
+  for (const brow of BROWS) {
+    const pts = brow.outline.map((i) => p[i]);
+    const c = { x: pts.reduce((a, q) => a + q.x, 0) / pts.length, y: pts.reduce((a, q) => a + q.y, 0) / pts.length };
+    local(ctx, f, c, () => {
+      ctx.lineWidth = 0.018;
       ctx.beginPath();
-      ctx.moveTo(side * 0.04, 0.008);
-      ctx.lineTo(-side * 0.035, -0.014);
+      style(ctx, brow.side);
       ctx.stroke();
     });
   }
@@ -264,6 +321,7 @@ export function drawMakeup(ctx, p, character, { hair, sway = 0 } = {}) {
   if (character === "none") return;
   const f = faceFrame(p);
 
+  eraseBrows(ctx, f, p);
   if (character === "usagi") skinTint(ctx, f, p, "rgba(255, 214, 90, 0.4)", "multiply");
   else skinTint(ctx, f, p, "rgba(255, 255, 255, 0.2)", "screen");
 
@@ -272,6 +330,6 @@ export function drawMakeup(ctx, p, character, { hair, sway = 0 } = {}) {
   if (hair?.ready) hair.composite(ctx, character === "hachiware" ? hachiwareHair(f, p) : null, ears);
   else ears();
 
-  if (character !== "hachiware") worriedBrows(ctx, f, p);
+  characterBrows(ctx, f, p, character);
   blush(ctx, f, p);
 }
